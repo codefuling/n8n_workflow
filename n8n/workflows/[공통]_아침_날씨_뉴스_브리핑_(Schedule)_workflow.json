@@ -1,0 +1,222 @@
+{
+  "name": "[공통] 아침 날씨 뉴스 브리핑 (Schedule)",
+  "nodes": [
+    {
+      "id": "schedule-1",
+      "name": "매일 09시",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "http-weather",
+      "name": "날씨 조회 (Open-Meteo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "37.5665"
+            },
+            {
+              "name": "longitude",
+              "value": "126.9780"
+            },
+            {
+              "name": "current",
+              "value": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
+            },
+            {
+              "name": "daily",
+              "value": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"
+            },
+            {
+              "name": "timezone",
+              "value": "Asia/Seoul"
+            },
+            {
+              "name": "forecast_days",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "rss-news",
+      "name": "인기 뉴스 (Google News RSS)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        400
+      ],
+      "parameters": {
+        "url": "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko",
+        "options": {}
+      }
+    },
+    {
+      "id": "merge-1",
+      "name": "병합",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        740,
+        300
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      }
+    },
+    {
+      "id": "code-compose",
+      "name": "브리핑 메시지 구성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 날씨 아이템과 뉴스 아이템을 분리\nconst all = $input.all().map(i => i.json);\n\nconst weatherItem = all.find(j => j && j.current && j.current.temperature_2m !== undefined);\nconst newsItems = all.filter(j => j && j.title && j.link);\n\nconst wmo = {\n  0: '맑음', 1: '대체로 맑음', 2: '부분적으로 흐림', 3: '흐림',\n  45: '안개', 48: '착빙 안개',\n  51: '약한 이슬비', 53: '이슬비', 55: '짙은 이슬비',\n  61: '약한 비', 63: '비', 65: '강한 비',\n  71: '약한 눈', 73: '눈', 75: '강한 눈',\n  80: '약한 소나기', 81: '소나기', 82: '강한 소나기',\n  95: '천둥번개', 96: '천둥번개(약한 우박)', 99: '천둥번개(강한 우박)'\n};\n\nlet weatherText = '날씨 정보를 불러오지 못했습니다.';\nif (weatherItem) {\n  const c = weatherItem.current;\n  const d = weatherItem.daily;\n  const desc = wmo[c.weather_code] ?? `코드 ${c.weather_code}`;\n  const tmax = Array.isArray(d.temperature_2m_max) ? d.temperature_2m_max[0] : d.temperature_2m_max;\n  const tmin = Array.isArray(d.temperature_2m_min) ? d.temperature_2m_min[0] : d.temperature_2m_min;\n  const pop = Array.isArray(d.precipitation_probability_max) ? d.precipitation_probability_max[0] : d.precipitation_probability_max;\n  weatherText = [\n    `현재 ${c.temperature_2m}°C (체감 ${c.apparent_temperature}°C), ${desc}`,\n    `최고 ${tmax}°C / 최저 ${tmin}°C · 강수확률 ${pop ?? 0}% · 습도 ${c.relative_humidity_2m}% · 바람 ${c.wind_speed_10m}km/h`\n  ].join('\\n');\n}\n\nconst top5 = newsItems.slice(0, 5).map((n, idx) => {\n  const title = (n.title || '').replace(/\\s+/g, ' ').trim();\n  return `${idx + 1}. <${n.link}|${title}>`;\n}).join('\\n');\n\nconst dateStr = new Date().toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });\n\nconst slackText = [\n  `:sunny: *${dateStr} 아침 브리핑*`,\n  ``,\n  `*오늘의 날씨 (서울)*`,\n  weatherText,\n  ``,\n  `*인기 뉴스 TOP 5*`,\n  top5 || '뉴스를 불러오지 못했습니다.'\n].join('\\n');\n\nreturn [{ json: { slackText } }];"
+      }
+    },
+    {
+      "id": "slack-send",
+      "name": "슬랙 전송",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1220,
+        300
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#n8n",
+          "mode": "name"
+        },
+        "text": "={{ $json.slackText }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "WwnX6LC5t5s6FCn1",
+          "name": "Slack account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "webhookId": "d9362253-e05d-44a4-a531-1520278fabf7"
+    }
+  ],
+  "connections": {
+    "매일 09시": {
+      "main": [
+        [
+          {
+            "node": "날씨 조회 (Open-Meteo)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "인기 뉴스 (Google News RSS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "날씨 조회 (Open-Meteo)": {
+      "main": [
+        [
+          {
+            "node": "병합",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "인기 뉴스 (Google News RSS)": {
+      "main": [
+        [
+          {
+            "node": "병합",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "병합": {
+      "main": [
+        [
+          {
+            "node": "브리핑 메시지 구성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "브리핑 메시지 구성": {
+      "main": [
+        [
+          {
+            "node": "슬랙 전송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "staticData": {
+    "node:매일 09시": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
