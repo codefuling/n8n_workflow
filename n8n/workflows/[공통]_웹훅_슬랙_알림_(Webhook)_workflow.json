@@ -1,0 +1,99 @@
+{
+  "name": "[공통] 웹훅 슬랙 알림 (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notify",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook 수신",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        304
+      ],
+      "webhookId": "1753fcc8-295c-45e1-a497-f6a92af5e16f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst title = body.title ?? '새 알림';\nconst message = body.message ?? body.text ?? JSON.stringify(body, null, 2);\nconst source = body.source ?? 'webhook';\n\nconst slackText = `*${title}*\\n${message}\\n\\n_출처: ${source} · ${new Date().toLocaleString('ko-KR')}_`;\n\nreturn [{ json: { slackText } }];"
+      },
+      "id": "code-1",
+      "name": "메시지 구성",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#n8n",
+          "mode": "name"
+        },
+        "text": "={{ $json.slackText }}",
+        "otherOptions": {}
+      },
+      "id": "slack-1",
+      "name": "슬랙 전송",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        704,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "webhookId": "ae675047-ab36-4cfd-81f8-c773a533400e",
+      "credentials": {
+        "slackApi": {
+          "id": "WwnX6LC5t5s6FCn1",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook 수신": {
+      "main": [
+        [
+          {
+            "node": "메시지 구성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메시지 구성": {
+      "main": [
+        [
+          {
+            "node": "슬랙 전송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
