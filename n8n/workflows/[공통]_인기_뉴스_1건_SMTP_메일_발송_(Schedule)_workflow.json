@@ -1,0 +1,239 @@
+{
+  "name": "[공통] 인기 뉴스 1건 SMTP 메일 발송 (Schedule)",
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "매일 오전 8시",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "rss",
+      "name": "Google 뉴스 RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "url": "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko",
+        "options": {}
+      }
+    },
+    {
+      "id": "limit1",
+      "name": "상위 1건만",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "maxItems": 1
+      }
+    },
+    {
+      "id": "fetchart",
+      "name": "기사 페이지 가져오기",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "url": "={{ $json.link }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 15000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "extractimg",
+      "name": "OG 이미지 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// 기사 메타에서 이미지 URL 추출. 실패해도 메일은 나가도록 null 반환.\nconst news = $('상위 1건만').item.json;\nconst html = typeof $json.data === 'string' ? $json.data\n           : typeof $json.body === 'string' ? $json.body\n           : '';\n\nfunction meta(prop) {\n  const patterns = [\n    new RegExp('<meta[^>]+property=[\"\\\\\\']' + prop + '[\"\\\\\\'][^>]*content=[\"\\\\\\']([^\"\\\\\\']+)', 'i'),\n    new RegExp('<meta[^>]+content=[\"\\\\\\']([^\"\\\\\\']+)[\"\\\\\\'][^>]*property=[\"\\\\\\']' + prop + '[\"\\\\\\']', 'i'),\n    new RegExp('<meta[^>]+name=[\"\\\\\\']' + prop + '[\"\\\\\\'][^>]*content=[\"\\\\\\']([^\"\\\\\\']+)', 'i')\n  ];\n  for (const re of patterns) {\n    const m = html.match(re);\n    if (m) return m[1];\n  }\n  return null;\n}\n\nlet img = meta('og:image') || meta('twitter:image') || meta('twitter:image:src');\n\n// 상대경로 보정\nif (img && img.startsWith('//')) img = 'https:' + img;\n\nreturn {\n  json: {\n    title: news.title,\n    link: news.link,\n    pubDate: news.isoDate || news.pubDate || '',\n    snippet: (news.contentSnippet || news.content || '').toString().replace(/<[^>]+>/g, '').slice(0, 500),\n    imageUrl: img || ''\n  }\n};"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "buildmail",
+      "name": "메일 내용 구성",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "subject",
+              "type": "string",
+              "value": "=[오늘의 인기 뉴스] {{ $json.title }}"
+            },
+            {
+              "id": "s2",
+              "name": "html",
+              "type": "string",
+              "value": "=<div style=\"font-family:Apple SD Gothic Neo,Malgun Gothic,sans-serif;max-width:600px;margin:0 auto\">\n  <h2 style=\"margin:0 0 8px\">{{ $json.title }}</h2>\n  <p style=\"color:#666;font-size:13px;margin:0 0 16px\">{{ $json.pubDate }}</p>\n  {{ $json.imageUrl ? '<img src=\"' + $json.imageUrl + '\" alt=\"기사 이미지\" style=\"width:100%;max-width:600px;border-radius:8px;margin:0 0 16px\">' : '' }}\n  <p style=\"font-size:15px;line-height:1.6\">{{ $json.snippet }}</p>\n  <p style=\"margin-top:20px\"><a href=\"{{ $json.link }}\" style=\"background:#1a73e8;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none\">기사 전문 보기</a></p>\n  <hr style=\"margin:24px 0;border:none;border-top:1px solid #eee\">\n  <p style=\"color:#999;font-size:12px\">Google 뉴스(한국) 자동 발송 · n8n</p>\n</div>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sendmail",
+      "name": "SMTP 메일 발송",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "fromEmail": "codefuling@gmail.com",
+        "toEmail": "codefuling@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "9rlgmP3Gkrt4b1fT",
+          "name": "SMTP account"
+        }
+      },
+      "webhookId": "5b6c5871-916f-43ff-8368-d20a43ef93a1"
+    }
+  ],
+  "connections": {
+    "매일 오전 8시": {
+      "main": [
+        [
+          {
+            "node": "Google 뉴스 RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google 뉴스 RSS": {
+      "main": [
+        [
+          {
+            "node": "상위 1건만",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "상위 1건만": {
+      "main": [
+        [
+          {
+            "node": "기사 페이지 가져오기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "기사 페이지 가져오기": {
+      "main": [
+        [
+          {
+            "node": "OG 이미지 추출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OG 이미지 추출": {
+      "main": [
+        [
+          {
+            "node": "메일 내용 구성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메일 내용 구성": {
+      "main": [
+        [
+          {
+            "node": "SMTP 메일 발송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
