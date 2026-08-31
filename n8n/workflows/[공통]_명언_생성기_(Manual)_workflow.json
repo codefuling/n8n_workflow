@@ -1,0 +1,50 @@
+{
+  "name": "[공통] 명언 생성기 (Manual)",
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "name": "트리거 클릭",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "code-1",
+      "name": "명언 랜덤 선택",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const quotes = [\n  '오늘 할 수 있는 일에 전력을 다하라. 그러면 내일은 한 걸음 더 나아가 있을 것이다.',\n  '성공은 최종적인 것이 아니고, 실패는 치명적인 것이 아니다. 중요한 것은 계속하려는 용기다.',\n  '가장 큰 위험은 위험 없는 삶이다.',\n  '작은 기회로부터 종종 위대한 업적이 시작된다.',\n  '늦었다고 생각할 때가 가장 빠른 때다.',\n  '행복은 습관이다. 그것을 몸에 지니라.',\n  '나는 실패한 적이 없다. 다만 효과가 없는 방법 1만 가지를 발견했을 뿐이다.',\n  '할 수 있다고 믿는 사람은 결국 그렇게 되고, 할 수 없다고 믿는 사람 역시 그렇게 된다.',\n  '삶이 있는 한 희망은 있다.',\n  '피할 수 없으면 즐겨라.',\n  '어제로부터 배우고, 오늘을 위해 살고, 내일을 희망하라.',\n  '한 번도 실수를 해보지 않은 사람은 한 번도 새로운 것을 시도하지 않은 사람이다.',\n  '천 리 길도 한 걸음부터 시작된다.',\n  '위대한 일은 갑자기 이루어지지 않는다.',\n  '지금 이 순간에 집중하라. 그것이 인생을 바꾸는 힘이다.'\n];\n\nconst pick = quotes[Math.floor(Math.random() * quotes.length)];\n\nreturn [\n  {\n    json: {\n      quote: pick,\n      generatedAt: new Date().toISOString()\n    }\n  }\n];"
+      }
+    }
+  ],
+  "connections": {
+    "트리거 클릭": {
+      "main": [
+        [
+          {
+            "node": "명언 랜덤 선택",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
