@@ -1,0 +1,60 @@
+{
+  "name": "[공통] GitHub 자동 백업 Push (Schedule)",
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "매일 21시 50분",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 21,
+              "triggerAtMinute": 50
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "gitpush",
+      "name": "Git Add / Commit / Push",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "command": "cd /d \"C:\\claude_1900_ksh\\workspace\\claude2\\n8n\" && git add -A && (git diff --cached --quiet && echo \"변경사항 없음 - push 생략\" || (git commit -m \"chore: 자동 백업 %DATE% %TIME%\" && git push origin HEAD))"
+      }
+    }
+  ],
+  "connections": {
+    "매일 21시 50분": {
+      "main": [
+        [
+          {
+            "node": "Git Add / Commit / Push",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
