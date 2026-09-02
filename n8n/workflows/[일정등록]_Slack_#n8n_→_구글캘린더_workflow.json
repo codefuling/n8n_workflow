@@ -1,0 +1,287 @@
+{
+  "name": "[일정등록] Slack #n8n → 구글캘린더",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": [
+          "message"
+        ],
+        "channelId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "",
+          "__regex": "https://app.slack.com/client/.*/([a-zA-Z0-9]{2,})"
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0001-4000-8000-000000000001",
+      "name": "Slack 메시지 수신",
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "dfa00e15-ace7-4a5b-befa-9c7f1a764385",
+      "credentials": {
+        "slackApi": {
+          "id": "WwnX6LC5t5s6FCn1",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.event?.subtype || $json.subtype || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-2",
+              "leftValue": "={{ $json.event?.bot_id || $json.bot_id || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-3",
+              "leftValue": "={{ $json.event?.text || $json.text || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0002-4000-8000-000000000002",
+      "name": "봇/시스템 메시지 제외",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json;\nconst ev = j.event || j;\nlet text = (ev.text || j.text || '').trim();\n\ntext = text\n  .replace(/<@[^>]+>/g, '')\n  .replace(/<#[^|>]+\\|([^>]+)>/g, '$1')\n  .replace(/<([^|>]+)\\|([^>]+)>/g, '$2')\n  .replace(/<([^>]+)>/g, '$1')\n  .replace(/[“”]/g, '\"')\n  .trim();\n\nconst TZ_OFFSET = '+09:00';\nconst now = new Date();\nconst thisYear = now.getFullYear();\nfunction pad(n) { return String(n).padStart(2, '0'); }\n\n// --- 날짜 ---\nlet y, mo, d;\nlet m = text.match(/(20\\d{2})[-.\\/](\\d{1,2})[-.\\/](\\d{1,2})/);\nif (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }\nelse {\n  m = text.match(/(?:^|\\s)(\\d{1,2})\\/(\\d{1,2})(?=\\s|$)/);\n  if (m) { y = thisYear; mo = +m[1]; d = +m[2]; }\n}\nif (!m) {\n  if (/내일/.test(text)) { const t = new Date(now.getTime() + 86400000); y = t.getFullYear(); mo = t.getMonth() + 1; d = t.getDate(); }\n  else if (/오늘/.test(text)) { y = thisYear; mo = now.getMonth() + 1; d = now.getDate(); }\n}\nif (!y) {\n  return { json: { parsed: false, reason: '날짜를 인식하지 못함 (YYYY-MM-DD 또는 MM/DD)', originalText: text } };\n}\n\n// --- 시간 ---\nlet sh, sm, eh, em;\nlet tm = text.match(/(\\d{1,2}):(\\d{2})\\s*[~\\-–]\\s*(\\d{1,2}):(\\d{2})/);\nif (tm) { sh = +tm[1]; sm = +tm[2]; eh = +tm[3]; em = +tm[4]; }\nelse {\n  tm = text.match(/(?:^|[^\\d:])(\\d{1,2}):(\\d{2})(?!\\s*[~\\-–]\\s*\\d)/);\n  if (tm) { sh = +tm[1]; sm = +tm[2]; eh = (sh + 1) % 24; em = sm; }\n}\nlet allDay = (sh === undefined);\n\n// --- 날짜/시간 토큰 제거 헬퍼 ---\nfunction stripDT(s) {\n  return s\n    .replace(/(20\\d{2})[-.\\/]\\d{1,2}[-.\\/]\\d{1,2}/g, ' ')\n    .replace(/\\d{1,2}:\\d{2}\\s*[~\\-–]\\s*\\d{1,2}:\\d{2}/g, ' ')\n    .replace(/\\d{1,2}:\\d{2}/g, ' ')\n    .replace(/(?:^|\\s)\\d{1,2}\\/\\d{1,2}(?=\\s|$)/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// --- 제목 ---\nlet summary = '';\nlet titleM = text.match(/(?:일정|제목|회의|미팅|스케줄)\\s*[:：]\\s*(.+)/);\nif (titleM) {\n  summary = stripDT(titleM[1].split(/\\n/)[0])\n    .replace(/장소\\s*[:：].*/g, '')\n    .replace(/@.*$/g, '')\n    .replace(/[~\\-–]\\s*$/, '')\n    .replace(/\\s+/g, ' ').trim();\n}\nif (!summary) {\n  summary = stripDT(text)\n    .replace(/\\/?(일정|제목|스케줄)\\s*[:：]?/g, '')\n    .replace(/오늘|내일/g, '')\n    .replace(/장소\\s*[:：].*/g, '')\n    .replace(/@.*$/gm, '')\n    .replace(/\\s+/g, ' ').trim();\n}\nif (!summary) summary = '(제목 없음)';\n\n// --- 장소 ---\nlet location = '';\nlet locM = text.match(/장소\\s*[:：]\\s*(.+)/);\nif (locM) location = locM[1].split(/\\n/)[0].trim();\nelse { locM = text.match(/@\\s*(\\S[^\\n]*)/); if (locM) location = locM[1].trim(); }\n\n// --- ISO ---\nlet startISO, endISO;\nif (allDay) {\n  startISO = `${y}-${pad(mo)}-${pad(d)}`;\n  const dt = new Date(Date.UTC(y, mo - 1, d + 1));\n  endISO = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;\n} else {\n  const sMin = sh * 60 + sm; const eMin = eh * 60 + em;\n  if (eMin <= sMin) { eh = (sh + 1) % 24; em = sm; }\n  startISO = `${y}-${pad(mo)}-${pad(d)}T${pad(sh)}:${pad(sm)}:00${TZ_OFFSET}`;\n  endISO = `${y}-${pad(mo)}-${pad(d)}T${pad(eh)}:${pad(em)}:00${TZ_OFFSET}`;\n}\n\nreturn { json: { parsed: true, allDay, summary, location, start: startISO, end: endISO, originalText: text } };\n"
+      },
+      "id": "c3d4e5f6-0003-4000-8000-000000000003",
+      "name": "일정 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "p-1",
+              "leftValue": "={{ $json.parsed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0004-4000-8000-000000000004",
+      "name": "파싱 성공?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "description": "={{ 'Slack #n8n 메시지로 등록\\n원문: ' + $json.originalText }}",
+          "location": "={{ $json.location }}",
+          "summary": "={{ $json.summary }}"
+        }
+      },
+      "id": "c3d4e5f6-0005-4000-8000-000000000005",
+      "name": "캘린더 등록",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Slack 메시지 수신').item.json.event?.channel || $('Slack 메시지 수신').item.json.channel }}"
+        },
+        "text": "={{ '✅ 캘린더에 등록했어요\\n• 제목: ' + $('일정 파싱').item.json.summary + '\\n• 시간: ' + $('일정 파싱').item.json.start + ($('일정 파싱').item.json.allDay ? ' (종일)' : ' ~ ' + $('일정 파싱').item.json.end) + ($('일정 파싱').item.json.location ? '\\n• 장소: ' + $('일정 파싱').item.json.location : '') }}",
+        "otherOptions": {
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Slack 메시지 수신').item.json.event?.ts || $('Slack 메시지 수신').item.json.ts }}"
+            }
+          }
+        }
+      },
+      "id": "c3d4e5f6-0006-4000-8000-000000000006",
+      "name": "성공 회신",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        192
+      ],
+      "webhookId": "4223afe0-bc96-46de-b731-78ad1c0fb529"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Slack 메시지 수신').item.json.event?.channel || $('Slack 메시지 수신').item.json.channel }}"
+        },
+        "text": "={{ '⚠️ 일정 형식을 인식하지 못했어요 (' + ($json.reason || '파싱 실패') + ')\\n예시:\\n· 일정: 팀 미팅 / 2026-09-05 14:00~15:00 / 장소: 회의실 A\\n· 9/5 10:30-11:00 디자인 리뷰 @ 3층\\n· 내일 15:00 병원 예약' }}",
+        "otherOptions": {
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Slack 메시지 수신').item.json.event?.ts || $('Slack 메시지 수신').item.json.ts }}"
+            }
+          }
+        }
+      },
+      "id": "c3d4e5f6-0007-4000-8000-000000000007",
+      "name": "실패 회신",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1200,
+        368
+      ],
+      "webhookId": "c0668e30-d946-4db2-abd0-88d79a4f4424"
+    }
+  ],
+  "connections": {
+    "Slack 메시지 수신": {
+      "main": [
+        [
+          {
+            "node": "봇/시스템 메시지 제외",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "봇/시스템 메시지 제외": {
+      "main": [
+        [
+          {
+            "node": "일정 파싱",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "일정 파싱": {
+      "main": [
+        [
+          {
+            "node": "파싱 성공?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "파싱 성공?": {
+      "main": [
+        [
+          {
+            "node": "캘린더 등록",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "실패 회신",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "캘린더 등록": {
+      "main": [
+        [
+          {
+            "node": "성공 회신",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
