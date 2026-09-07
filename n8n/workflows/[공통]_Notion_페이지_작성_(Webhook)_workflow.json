@@ -1,0 +1,125 @@
+{
+  "name": "[공통] Notion 페이지 작성 (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notion-write",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook 수신",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "c5858673-b32c-48fe-acbc-2b0ea6e9bdb0"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const hook = $('Webhook 수신').item.json;\nconst payload = hook.body || hook.query || {};\n\nconst title = (payload.title || '제목 없음').toString();\nconst content = (payload.content || payload.text || payload.body || '').toString();\n\n// 부모 페이지 ID: 요청에 있으면 사용, 없으면 아래 기본값(반드시 교체)\nconst DEFAULT_PARENT_PAGE_ID = 'REPLACE_WITH_PARENT_PAGE_ID';\nconst parentPageId = (payload.parentPageId || payload.parent || DEFAULT_PARENT_PAGE_ID).toString();\n\nreturn { json: { title, content, parentPageId } };\n"
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "입력 정리",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "pageId": {
+          "__rl": true,
+          "value": "3d43dec4435b80eaad7fcb3593a69e7d",
+          "mode": "id"
+        },
+        "title": "={{ $json.title }}",
+        "contentType": "markdown",
+        "markdown": "={{ $json.content }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Notion 페이지 생성",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 3,
+      "position": [
+        800,
+        304
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "yVWBhYYVB1WBmy1G",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"ok\": true, \"pageId\": $json.id, \"url\": $json.url } }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "응답 반환",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook 수신": {
+      "main": [
+        [
+          {
+            "node": "입력 정리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "입력 정리": {
+      "main": [
+        [
+          {
+            "node": "Notion 페이지 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion 페이지 생성": {
+      "main": [
+        [
+          {
+            "node": "응답 반환",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "lzigETrtTWjhaGMB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
